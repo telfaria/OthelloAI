@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/docs/">
+    <File Path="AIAlgorithms.md" />
+    <File Path="Architecture.md" />
+    <File Path="CodingRules.md" />
+    <File Path="Decisions.md" />
+    <File Path="GameRules.md" />
+    <File Path="Roadmap.md" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Folder Name="/ソリューション項目/">
+    <File Path="AGENTS.md" />
+  </Folder>
+  <Project Path="Othello.AI/Othello.AI.csproj" />
+  <Project Path="Othello.Console/Othello.Console.csproj" />
+  <Project Path="Othello.Core/Othello.Core.csproj" />
+  <Project Path="Othello.Tests/Othello.Tests.csproj" />
+</Solution>
