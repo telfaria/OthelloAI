@@ -11,6 +11,9 @@ public sealed class GreedyAI : IOthelloAI
     public string Name => "GreedyAI";
 
     /// <inheritdoc/>
+    public void Reset() { }
+
+    /// <inheritdoc/>
     public AIDecision DecideMove(Board board)
     {
         ArgumentNullException.ThrowIfNull(board);

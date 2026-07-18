@@ -30,6 +30,9 @@ public sealed class RandomAI : IOthelloAI
     public string Name => "RandomAI";
 
     /// <inheritdoc/>
+    public void Reset() { }
+
+    /// <inheritdoc/>
     public AIDecision DecideMove(Board board)
     {
         ArgumentNullException.ThrowIfNull(board);

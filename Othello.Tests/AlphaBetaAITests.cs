@@ -3,39 +3,18 @@ using Othello.Core;
 
 namespace Othello.Tests;
 
-public class MinimaxAITests
+public class AlphaBetaAITests
 {
     [Fact]
     public void Constructor_Throws_WhenDepthIsLessThanOne()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new MinimaxAI(0));
-    }
-
-    [Fact]
-    public void Constructor_UsesDefaultWeights_WhenWeightsIsNull()
-    {
-        var ai = new MinimaxAI(1, weights: null);
-        var board = Board.CreateInitial();
-
-        AIDecision decision = ai.DecideMove(board);
-
-        Assert.NotNull(decision.Move);
-        Assert.Contains("w=[", ai.Name, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Constructor_UsesCustomWeights()
-    {
-        var weights = new EvaluationWeights(discDifference: 1, mobility: 0, corner: 100, positional: 0);
-        var ai = new MinimaxAI(1, weights: weights);
-
-        Assert.Contains("corner=100", ai.Name, StringComparison.Ordinal);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AlphaBetaAI(0));
     }
 
     [Fact]
     public void DecideMove_ReturnsLegalMove_WhenLegalMovesExist()
     {
-        var ai = new MinimaxAI(2);
+        var ai = new AlphaBetaAI(2);
         var board = Board.CreateInitial();
 
         AIDecision decision = ai.DecideMove(board);
@@ -43,12 +22,13 @@ public class MinimaxAITests
         Assert.NotNull(decision.Move);
         Assert.True(board.IsLegalMove(decision.Move!.Value));
         Assert.Contains("Depth=2", decision.Thought, StringComparison.Ordinal);
+        Assert.Contains("Time=", decision.Thought, StringComparison.Ordinal);
     }
 
     [Fact]
     public void DecideMove_ReturnsNullMove_WhenNoLegalMovesExist()
     {
-        var ai = new MinimaxAI();
+        var ai = new AlphaBetaAI();
         var cells = new Disc[Board.BoardSize, Board.BoardSize];
         Fill(cells, Disc.Black);
         var board = Board.FromCells(cells, Disc.White);
@@ -59,9 +39,9 @@ public class MinimaxAITests
     }
 
     [Fact]
-    public void DecideMove_DepthOne_PrefersCorner_WhenCornerIsAvailable()
+    public void DecideMove_PrefersCorner_WhenCornerIsAvailable()
     {
-        var ai = new MinimaxAI(1);
+        var ai = new AlphaBetaAI(1);
         var cells = new Disc[Board.BoardSize, Board.BoardSize];
 
         cells[0, 1] = Disc.White;
@@ -75,6 +55,36 @@ public class MinimaxAITests
 
         Assert.NotNull(decision.Move);
         Assert.Equal(new Move(0, 0), decision.Move.Value);
+    }
+
+    [Fact]
+    public void DecideMove_ProducesFewerNodes_ThanMinimax_AtSameDepth()
+    {
+        var alphaBeta = new AlphaBetaAI(3, maxDegreeOfParallelism: 1);
+        var minimax = new MinimaxAI(3, maxDegreeOfParallelism: 1);
+        var board = Board.CreateInitial();
+
+        AIDecision abDecision = alphaBeta.DecideMove(board.Clone());
+        AIDecision mmDecision = minimax.DecideMove(board.Clone());
+
+        long abNodes = ParseNodes(abDecision.Thought);
+        long mmNodes = ParseNodes(mmDecision.Thought);
+
+        Assert.True(abNodes <= mmNodes, $"AlphaBeta nodes ({abNodes}) should be <= Minimax nodes ({mmNodes})");
+    }
+
+    private static long ParseNodes(string thought)
+    {
+        foreach (string part in thought.Split(','))
+        {
+            string trimmed = part.Trim();
+            if (trimmed.StartsWith("Nodes=", StringComparison.Ordinal))
+            {
+                return long.Parse(trimmed[6..]);
+            }
+        }
+
+        throw new InvalidOperationException($"Nodes not found in thought: {thought}");
     }
 
     private static void Fill(Disc[,] cells, Disc value)

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Othello.AI;
 using Othello.Core;
 
@@ -13,8 +13,8 @@ internal static class Program
         int gameCount = ResolveGameCount(args);
         bool showThinking = ResolveThinkingVisibility(args);
 
-        IOthelloAI blackAI = new MinimaxAI();
-        IOthelloAI whiteAI = new MinimaxAI();
+        IOthelloAI blackAI = new MctsAI();
+        IOthelloAI whiteAI = new MctsAI();
 
         global::System.Console.WriteLine("CPU vs CPU simulation started.");
         global::System.Console.WriteLine($"Black={blackAI.Name}, White={whiteAI.Name}, Games={gameCount}, ShowThinking={showThinking}");
@@ -31,6 +31,9 @@ internal static class Program
 
         for (int gameIndex = 1; gameIndex <= gameCount; gameIndex++)
         {
+            blackAI.Reset();
+            whiteAI.Reset();
+
             Board board = Board.CreateInitial();
             int movesInGame = 0;
             int passesInGame = 0;
@@ -264,23 +267,14 @@ internal static class Program
     private sealed class SimulationSummary
     {
         public int BlackWins { get; set; }
-
         public int WhiteWins { get; set; }
-
         public int Draws { get; set; }
-
         public long TotalBlackDiscs { get; set; }
-
         public long TotalWhiteDiscs { get; set; }
-
         public long TotalMoves { get; set; }
-
         public long TotalPasses { get; set; }
-
         public long TotalMargin { get; set; }
-
         public int MaxMargin { get; set; }
-
         public TimeSpan Elapsed { get; set; }
     }
 }

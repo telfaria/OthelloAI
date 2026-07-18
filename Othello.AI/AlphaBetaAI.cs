@@ -5,9 +5,22 @@ using Othello.Core;
 namespace Othello.AI;
 
 /// <summary>
-/// Selects a move using the minimax algorithm.
+/// Selects a move using the minimax algorithm with alpha-beta pruning.
 /// </summary>
-public sealed class MinimaxAI : IOthelloAI
+/// <remarks>
+/// Alpha-beta pruning eliminates branches that cannot influence the final decision.
+///
+/// Two bounds are maintained at each node:
+///   alpha: best score the maximizer (root player) is guaranteed so far.
+///   beta:  best score the minimizer (opponent) is guaranteed so far.
+///
+/// When alpha >= beta, the remaining siblings can never be chosen by the opponent (beta cutoff)
+/// or by us (alpha cutoff), so the search stops early.
+///
+/// This reduces the effective branching factor from B to roughly sqrt(B) in the best case,
+/// allowing roughly twice the search depth compared to plain minimax for the same time budget.
+/// </remarks>
+public sealed class AlphaBetaAI : IOthelloAI
 {
     private static readonly int[,] PositionalTable =
     {
@@ -21,17 +34,17 @@ public sealed class MinimaxAI : IOthelloAI
         { 120, -20, 20, 5, 5, 20, -20, 120 }
     };
 
-    private readonly ConcurrentDictionary<CacheKey, int> _transpositionTable;
     private readonly EvaluationWeights _weights;
+    private readonly ConcurrentDictionary<CacheKey, int> _transpositionTable;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MinimaxAI"/> class.
+    /// Initializes a new instance of the <see cref="AlphaBetaAI"/> class.
     /// </summary>
     /// <param name="searchDepth">Search depth in plies.</param>
-    /// <param name="maxDegreeOfParallelism">Maximum number of parallel workers for root move evaluation.</param>
+    /// <param name="maxDegreeOfParallelism">Maximum parallel workers for root move evaluation.</param>
     /// <param name="transpositionTableCapacity">Approximate maximum number of cached nodes.</param>
-    /// <param name="weights">Evaluation weights. Uses default weights when null.</param>
-    public MinimaxAI(int searchDepth = 3, int? maxDegreeOfParallelism = null, int transpositionTableCapacity = 1_000_000, EvaluationWeights? weights = null)
+    /// <param name="weights">Evaluation weights. Uses default when null.</param>
+    public AlphaBetaAI(int searchDepth = 4, int? maxDegreeOfParallelism = null, int transpositionTableCapacity = 1_000_000, EvaluationWeights? weights = null)
     {
         if (searchDepth < 1)
         {
@@ -61,17 +74,17 @@ public sealed class MinimaxAI : IOthelloAI
     public int SearchDepth { get; }
 
     /// <summary>
-    /// Gets maximum degree of parallelism used for root move evaluation.
+    /// Gets maximum degree of parallelism.
     /// </summary>
     public int MaxDegreeOfParallelism { get; }
 
     /// <summary>
-    /// Gets transposition table capacity.
+    /// Gets the transposition table capacity.
     /// </summary>
     public int TranspositionTableCapacity { get; }
 
     /// <inheritdoc/>
-    public string Name => $"MinimaxAI(d={SearchDepth}, p={MaxDegreeOfParallelism}, tt={TranspositionTableCapacity}, w=[{_weights}])";
+    public string Name => $"AlphaBetaAI(d={SearchDepth}, p={MaxDegreeOfParallelism}, tt={TranspositionTableCapacity}, w=[{_weights}])";
 
     /// <inheritdoc/>
     public void Reset()
@@ -109,6 +122,9 @@ public sealed class MinimaxAI : IOthelloAI
 
         var stopwatch = Stopwatch.StartNew();
 
+        // Root moves are evaluated in parallel.
+        // Each worker starts with full alpha/beta window so pruning between workers is not applied
+        // at the root level, but sub-trees are pruned independently per worker.
         Parallel.For(0, legalMoves.Count, options, i =>
         {
             Move candidate = legalMoves[i];
@@ -119,7 +135,7 @@ public sealed class MinimaxAI : IOthelloAI
                 return;
             }
 
-            int score = EvaluateMinimax(simulation, SearchDepth - 1, rootPlayer, ref nodes);
+            int score = EvaluateAlphaBeta(simulation, SearchDepth - 1, int.MinValue, int.MaxValue, rootPlayer, ref nodes);
 
             lock (gate)
             {
@@ -139,14 +155,16 @@ public sealed class MinimaxAI : IOthelloAI
     }
 
     /// <summary>
-    /// Recursively evaluates a game tree with minimax.
+    /// Recursively evaluates a node using alpha-beta pruning.
     /// </summary>
     /// <param name="board">Current simulation board.</param>
     /// <param name="depth">Remaining search depth.</param>
-    /// <param name="rootPlayer">Player who started the search.</param>
+    /// <param name="alpha">Best score the maximizer can guarantee so far.</param>
+    /// <param name="beta">Best score the minimizer can guarantee so far.</param>
+    /// <param name="rootPlayer">Player who initiated the search.</param>
     /// <param name="nodes">Visited node counter.</param>
     /// <returns>Evaluation score from root player perspective.</returns>
-    private int EvaluateMinimax(Board board, int depth, Disc rootPlayer, ref long nodes)
+    private int EvaluateAlphaBeta(Board board, int depth, int alpha, int beta, Disc rootPlayer, ref long nodes)
     {
         Interlocked.Increment(ref nodes);
 
@@ -167,7 +185,9 @@ public sealed class MinimaxAI : IOthelloAI
         if (legalMoves.Count == 0)
         {
             bool passed = board.TryPass();
-            result = !passed ? EvaluateBoard(board, rootPlayer) : EvaluateMinimax(board, depth - 1, rootPlayer, ref nodes);
+            result = !passed
+                ? EvaluateBoard(board, rootPlayer)
+                : EvaluateAlphaBeta(board, depth - 1, alpha, beta, rootPlayer, ref nodes);
             TryCache(cacheKey, result);
             return result;
         }
@@ -175,6 +195,7 @@ public sealed class MinimaxAI : IOthelloAI
         bool isMaxTurn = board.CurrentPlayer == rootPlayer;
         if (isMaxTurn)
         {
+            // Maximizer: raise alpha, prune when alpha >= beta (beta cutoff).
             int bestScore = int.MinValue;
             for (int i = 0; i < legalMoves.Count; i++)
             {
@@ -185,10 +206,21 @@ public sealed class MinimaxAI : IOthelloAI
                     continue;
                 }
 
-                int score = EvaluateMinimax(child, depth - 1, rootPlayer, ref nodes);
+                int score = EvaluateAlphaBeta(child, depth - 1, alpha, beta, rootPlayer, ref nodes);
                 if (score > bestScore)
                 {
                     bestScore = score;
+                }
+
+                if (bestScore > alpha)
+                {
+                    alpha = bestScore;
+                }
+
+                // Beta cutoff: minimizer would avoid this node.
+                if (alpha >= beta)
+                {
+                    break;
                 }
             }
 
@@ -196,6 +228,7 @@ public sealed class MinimaxAI : IOthelloAI
         }
         else
         {
+            // Minimizer: lower beta, prune when alpha >= beta (alpha cutoff).
             int minScore = int.MaxValue;
             for (int i = 0; i < legalMoves.Count; i++)
             {
@@ -206,10 +239,21 @@ public sealed class MinimaxAI : IOthelloAI
                     continue;
                 }
 
-                int score = EvaluateMinimax(child, depth - 1, rootPlayer, ref nodes);
+                int score = EvaluateAlphaBeta(child, depth - 1, alpha, beta, rootPlayer, ref nodes);
                 if (score < minScore)
                 {
                     minScore = score;
+                }
+
+                if (minScore < beta)
+                {
+                    beta = minScore;
+                }
+
+                // Alpha cutoff: maximizer would avoid this node.
+                if (alpha >= beta)
+                {
+                    break;
                 }
             }
 
@@ -226,6 +270,70 @@ public sealed class MinimaxAI : IOthelloAI
         {
             _transpositionTable.TryAdd(key, score);
         }
+    }
+
+    private int EvaluateBoard(Board board, Disc rootPlayer)
+    {
+        Disc opponent = rootPlayer == Disc.Black ? Disc.White : Disc.Black;
+
+        int discDifference = board.CountDiscs(rootPlayer) - board.CountDiscs(opponent);
+        int mobilityDifference = CountLegalMovesForPlayer(board, rootPlayer) - CountLegalMovesForPlayer(board, opponent);
+        int cornerDifference = CountCornerDiscs(board, rootPlayer) - CountCornerDiscs(board, opponent);
+        int positionalDifference = CalculatePositionalScore(board, rootPlayer, opponent);
+
+        return (discDifference * _weights.DiscDifference)
+            + (mobilityDifference * _weights.Mobility)
+            + (cornerDifference * _weights.Corner)
+            + (positionalDifference * _weights.Positional);
+    }
+
+    private static int CountLegalMovesForPlayer(Board board, Disc player)
+    {
+        var cells = new Disc[Board.BoardSize, Board.BoardSize];
+        for (int row = 0; row < Board.BoardSize; row++)
+        {
+            for (int col = 0; col < Board.BoardSize; col++)
+            {
+                cells[row, col] = board.GetDisc(new Position(row, col));
+            }
+        }
+
+        return Board.FromCells(cells, player).GetLegalMoves().Count;
+    }
+
+    private static int CountCornerDiscs(Board board, Disc player)
+    {
+        int last = Board.BoardSize - 1;
+        int count = 0;
+
+        if (board.GetDisc(new Position(0, 0)) == player) count++;
+        if (board.GetDisc(new Position(0, last)) == player) count++;
+        if (board.GetDisc(new Position(last, 0)) == player) count++;
+        if (board.GetDisc(new Position(last, last)) == player) count++;
+
+        return count;
+    }
+
+    private static int CalculatePositionalScore(Board board, Disc player, Disc opponent)
+    {
+        int score = 0;
+        for (int row = 0; row < Board.BoardSize; row++)
+        {
+            for (int col = 0; col < Board.BoardSize; col++)
+            {
+                Disc disc = board.GetDisc(new Position(row, col));
+                if (disc == player)
+                {
+                    score += PositionalTable[row, col];
+                }
+                else if (disc == opponent)
+                {
+                    score -= PositionalTable[row, col];
+                }
+            }
+        }
+
+        return score;
     }
 
     private static ulong ComputeBoardHash(Board board)
@@ -246,93 +354,6 @@ public sealed class MinimaxAI : IOthelloAI
         hash ^= (ulong)board.CurrentPlayer;
         hash *= prime;
         return hash;
-    }
-
-    private int EvaluateBoard(Board board, Disc rootPlayer)
-    {
-        Disc opponent = rootPlayer == Disc.Black ? Disc.White : Disc.Black;
-
-        int discDifference = board.CountDiscs(rootPlayer) - board.CountDiscs(opponent);
-        int mobilityDifference = CountLegalMovesForPlayer(board, rootPlayer) - CountLegalMovesForPlayer(board, opponent);
-        int cornerDifference = CountCornerDiscs(board, rootPlayer) - CountCornerDiscs(board, opponent);
-        int positionalDifference = CalculatePositionalScore(board, rootPlayer, opponent);
-
-        return (discDifference * _weights.DiscDifference)
-            + (mobilityDifference * _weights.Mobility)
-            + (cornerDifference * _weights.Corner)
-            + (positionalDifference * _weights.Positional);
-    }
-
-    private static int CountLegalMovesForPlayer(Board board, Disc player)
-    {
-        Board playerView = CreateBoardWithCurrentPlayer(board, player);
-        return playerView.GetLegalMoves().Count;
-    }
-
-    private static int CountCornerDiscs(Board board, Disc player)
-    {
-        int last = Board.BoardSize - 1;
-        int count = 0;
-
-        if (board.GetDisc(new Position(0, 0)) == player)
-        {
-            count++;
-        }
-
-        if (board.GetDisc(new Position(0, last)) == player)
-        {
-            count++;
-        }
-
-        if (board.GetDisc(new Position(last, 0)) == player)
-        {
-            count++;
-        }
-
-        if (board.GetDisc(new Position(last, last)) == player)
-        {
-            count++;
-        }
-
-        return count;
-    }
-
-    private static int CalculatePositionalScore(Board board, Disc player, Disc opponent)
-    {
-        int score = 0;
-
-        for (int row = 0; row < Board.BoardSize; row++)
-        {
-            for (int col = 0; col < Board.BoardSize; col++)
-            {
-                Disc disc = board.GetDisc(new Position(row, col));
-                if (disc == player)
-                {
-                    score += PositionalTable[row, col];
-                }
-                else if (disc == opponent)
-                {
-                    score -= PositionalTable[row, col];
-                }
-            }
-        }
-
-        return score;
-    }
-
-    private static Board CreateBoardWithCurrentPlayer(Board board, Disc player)
-    {
-        var cells = new Disc[Board.BoardSize, Board.BoardSize];
-
-        for (int row = 0; row < Board.BoardSize; row++)
-        {
-            for (int col = 0; col < Board.BoardSize; col++)
-            {
-                cells[row, col] = board.GetDisc(new Position(row, col));
-            }
-        }
-
-        return Board.FromCells(cells, player);
     }
 
     private static string ToCoordinate(Move move)
