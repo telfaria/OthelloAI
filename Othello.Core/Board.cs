@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Othello.Core;
 
 /// <summary>
@@ -101,21 +103,58 @@ public sealed class Board
     /// <returns>Legal moves.</returns>
     public IReadOnlyList<Move> GetLegalMoves()
     {
-        var moves = new List<Move>();
+        var moves = new List<Move>(16);
+        Disc player = CurrentPlayer;
 
         for (var row = 0; row < BoardSize; row++)
         {
             for (var col = 0; col < BoardSize; col++)
             {
-                var position = new Position(row, col);
-                if (IsLegalMoveForPlayer(position, CurrentPlayer))
+                if (_cells[row, col] != Disc.Empty)
                 {
-                    moves.Add(new Move(position));
+                    continue;
+                }
+
+                if (CanFlip(row, col, player))
+                {
+                    moves.Add(new Move(row, col));
                 }
             }
         }
 
         return moves;
+    }
+
+    /// <summary>
+    /// Fills the supplied buffer with legal moves for the current player without heap allocation.
+    /// </summary>
+    /// <param name="buffer">
+    /// Caller-supplied stack buffer. Must have capacity &gt;= <see cref="BoardSize"/> * <see cref="BoardSize"/>.
+    /// A stackalloc of 64 <see cref="Move"/> values is always sufficient.
+    /// </param>
+    /// <returns>The number of legal moves written into <paramref name="buffer"/>.</returns>
+    public int EnumerateLegalMoves(Span<Move> buffer)
+    {
+        Disc player = CurrentPlayer;
+        int count = 0;
+
+        for (int row = 0; row < BoardSize; row++)
+        {
+            for (int col = 0; col < BoardSize; col++)
+            {
+                if (_cells[row, col] != Disc.Empty)
+                {
+                    continue;
+                }
+
+                if (CanFlip(row, col, player))
+                {
+                    buffer[count++] = new Move(row, col);
+                }
+            }
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -160,18 +199,12 @@ public sealed class Board
             return false;
         }
 
-        var flips = CollectFlips(position, CurrentPlayer);
-        if (flips.Count == 0)
+        if (!ApplyFlipsInPlace(position.Row, position.Col, CurrentPlayer))
         {
             return false;
         }
 
         _cells[position.Row, position.Col] = CurrentPlayer;
-        foreach (var flip in flips)
-        {
-            _cells[flip.Row, flip.Col] = CurrentPlayer;
-        }
-
         CurrentPlayer = GetOpponent(CurrentPlayer);
         return true;
     }
@@ -243,7 +276,7 @@ public sealed class Board
         {
             for (var col = 0; col < BoardSize; col++)
             {
-                if (IsLegalMoveForPlayer(new Position(row, col), player))
+                if (IsLegalMoveForPlayer(row, col, player))
                 {
                     return true;
                 }
@@ -255,39 +288,118 @@ public sealed class Board
 
     private bool IsLegalMoveForPlayer(Position position, Disc player)
     {
-        if (!IsInBounds(position) || _cells[position.Row, position.Col] != Disc.Empty)
+        return IsLegalMoveForPlayer(position.Row, position.Col, player);
+    }
+
+    private bool IsLegalMoveForPlayer(int row, int col, Disc player)
+    {
+        if (!IsInBounds(row, col) || _cells[row, col] != Disc.Empty)
         {
             return false;
         }
 
-        return CollectFlips(position, player).Count > 0;
+        return CanFlip(row, col, player);
     }
 
-    private List<Position> CollectFlips(Position position, Disc player)
+    private bool CanFlip(int row, int col, Disc player)
     {
-        var result = new List<Position>();
-        var opponent = GetOpponent(player);
+        Disc opponent = GetOpponent(player);
 
-        foreach (var direction in Directions)
+        for (var i = 0; i < Directions.Length; i++)
         {
-            var row = position.Row + direction.RowDelta;
-            var col = position.Col + direction.ColDelta;
-            var line = new List<Position>();
-
-            while (IsInBounds(row, col) && _cells[row, col] == opponent)
+            (int rowDelta, int colDelta) = Directions[i];
+            if (CanFlipInDirection(row, col, player, opponent, rowDelta, colDelta))
             {
-                line.Add(new Position(row, col));
-                row += direction.RowDelta;
-                col += direction.ColDelta;
-            }
-
-            if (line.Count > 0 && IsInBounds(row, col) && _cells[row, col] == player)
-            {
-                result.AddRange(line);
+                return true;
             }
         }
 
-        return result;
+        return false;
+    }
+
+    private bool CanFlipInDirection(int row, int col, Disc player, Disc opponent, int rowDelta, int colDelta)
+    {
+        row += rowDelta;
+        col += colDelta;
+
+        if (!IsInBounds(row, col) || _cells[row, col] != opponent)
+        {
+            return false;
+        }
+
+        row += rowDelta;
+        col += colDelta;
+
+        while (IsInBounds(row, col))
+        {
+            Disc disc = _cells[row, col];
+            if (disc == Disc.Empty)
+            {
+                return false;
+            }
+
+            if (disc == player)
+            {
+                return true;
+            }
+
+            row += rowDelta;
+            col += colDelta;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Applies all flips for a move in-place without allocating a flip list.
+    /// Returns <c>false</c> if the move has no flippable lines (illegal move).
+    /// </summary>
+    private bool ApplyFlipsInPlace(int row, int col, Disc player)
+    {
+        Disc opponent = GetOpponent(player);
+        bool anyFlip = false;
+
+        for (int i = 0; i < Directions.Length; i++)
+        {
+            (int rowDelta, int colDelta) = Directions[i];
+
+            int r = row + rowDelta;
+            int c = col + colDelta;
+
+            if (!IsInBounds(r, c) || _cells[r, c] != opponent)
+            {
+                continue;
+            }
+
+            int startR = r;
+            int startC = c;
+
+            r += rowDelta;
+            c += colDelta;
+
+            while (IsInBounds(r, c) && _cells[r, c] == opponent)
+            {
+                r += rowDelta;
+                c += colDelta;
+            }
+
+            if (!IsInBounds(r, c) || _cells[r, c] != player)
+            {
+                continue;
+            }
+
+            // 確定した挟み: start→(r,c)の手前まで反転
+            while (startR != r || startC != c)
+            {
+                _cells[startR, startC] = player;
+                startR += rowDelta;
+                startC += colDelta;
+            }
+
+            anyFlip = true;
+        }
+
+        return anyFlip;
     }
 
     private static Disc GetOpponent(Disc player)
@@ -300,14 +412,16 @@ public sealed class Board
         };
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsInBounds(Position position)
     {
         return IsInBounds(position.Row, position.Col);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsInBounds(int row, int col)
     {
-        return row >= 0 && row < BoardSize && col >= 0 && col < BoardSize;
+        return (uint)row < BoardSize && (uint)col < BoardSize;
     }
 
     private static void EnsureInBounds(Position position)

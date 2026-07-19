@@ -16,5 +16,8 @@
   <Project Path="Othello.AI/Othello.AI.csproj" />
   <Project Path="Othello.Console/Othello.Console.csproj" />
   <Project Path="Othello.Core/Othello.Core.csproj" />
+  <Project Path="Othello.Python/Othello.Python.pyproj" Type="888888a0-9f3d-457c-b088-3a5042f75d52" Id="41436e86-3e11-45be-bdc4-ff9c14b392fd">
+    <Build Project="false" />
+  </Project>
   <Project Path="Othello.Tests/Othello.Tests.csproj" />
 </Solution>

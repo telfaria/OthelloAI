@@ -18,6 +18,12 @@ public class MctsAITests
     }
 
     [Fact]
+    public void Constructor_Throws_WhenMaxDegreeOfParallelismIsLessThanOne()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MctsAI(maxDegreeOfParallelism: 0));
+    }
+
+    [Fact]
     public void DecideMove_ReturnsLegalMove_WhenLegalMovesExist()
     {
         var ai = new MctsAI(iterations: 100);
@@ -28,7 +34,22 @@ public class MctsAITests
         Assert.NotNull(decision.Move);
         Assert.True(board.IsLegalMove(decision.Move!.Value));
         Assert.Contains("Iterations=100", decision.Thought, StringComparison.Ordinal);
+        Assert.Contains("Mode=SingleTree", decision.Thought, StringComparison.Ordinal);
         Assert.Contains("Time=", decision.Thought, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DecideMove_ParallelRootMode_ReturnsLegalMove_WhenLegalMovesExist()
+    {
+        var ai = new MctsAI(iterations: 100, maxDegreeOfParallelism: 4);
+        var board = Board.CreateInitial();
+
+        AIDecision decision = ai.DecideMove(board);
+
+        Assert.NotNull(decision.Move);
+        Assert.True(board.IsLegalMove(decision.Move!.Value));
+        Assert.Contains("Mode=ParallelRoot", decision.Thought, StringComparison.Ordinal);
+        Assert.Contains("Parallelism=4", decision.Thought, StringComparison.Ordinal);
     }
 
     [Fact]

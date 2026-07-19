@@ -29,14 +29,13 @@ namespace Othello.AI;
 /// </remarks>
 public sealed class MctsAI : IOthelloAI
 {
-    private readonly Random _random;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="MctsAI"/> class.
     /// </summary>
     /// <param name="iterations">Number of MCTS iterations per move.</param>
     /// <param name="explorationConstant">UCB1 exploration constant C. Higher values explore more broadly.</param>
-    public MctsAI(int iterations = 1000, double explorationConstant = 1.414)
+    /// <param name="maxDegreeOfParallelism">Maximum parallel workers for root-level parallelization.</param>
+    public MctsAI(int iterations = 1000, double explorationConstant = 1.414, int maxDegreeOfParallelism = 1)
     {
         if (iterations < 1)
         {
@@ -48,9 +47,14 @@ public sealed class MctsAI : IOthelloAI
             throw new ArgumentOutOfRangeException(nameof(explorationConstant), "Exploration constant must be >= 0.");
         }
 
+        if (maxDegreeOfParallelism < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDegreeOfParallelism), "MaxDegreeOfParallelism must be >= 1.");
+        }
+
         Iterations = iterations;
         ExplorationConstant = explorationConstant;
-        _random = new Random();
+        MaxDegreeOfParallelism = maxDegreeOfParallelism;
     }
 
     /// <summary>
@@ -63,8 +67,13 @@ public sealed class MctsAI : IOthelloAI
     /// </summary>
     public double ExplorationConstant { get; }
 
+    /// <summary>
+    /// Gets the maximum parallel workers for root-level search.
+    /// </summary>
+    public int MaxDegreeOfParallelism { get; }
+
     /// <inheritdoc/>
-    public string Name => $"MctsAI(iter={Iterations}, C={ExplorationConstant:F3})";
+    public string Name => $"MctsAI(iter={Iterations}, C={ExplorationConstant:F3}, p={MaxDegreeOfParallelism})";
 
     /// <inheritdoc/>
     public void Reset() { }
@@ -81,49 +90,137 @@ public sealed class MctsAI : IOthelloAI
         }
 
         Disc rootPlayer = board.CurrentPlayer;
-        var root = new MctsNode(board.Clone(), parentMove: null, parent: null);
-
         var stopwatch = Stopwatch.StartNew();
 
-        for (int i = 0; i < Iterations; i++)
+        if (MaxDegreeOfParallelism == 1 || legalMoves.Count == 1)
         {
-            // 1. Selection
-            MctsNode selected = Select(root);
+            var root = new MctsNode(board.Clone(), parentMove: null, parent: null);
+            RunIterations(root, Iterations, rootPlayer);
 
-            // 2. Expansion
-            MctsNode expanded = Expand(selected);
-
-            // 3. Simulation
-            double result = Simulate(expanded, rootPlayer);
-
-            // 4. Backpropagation
-            Backpropagate(expanded, result);
+            stopwatch.Stop();
+            return BuildDecision(root.Children, legalMoves, stopwatch.Elapsed.TotalMilliseconds, parallelMode: false);
         }
 
-        stopwatch.Stop();
+        int workerCount = Math.Min(Math.Min(MaxDegreeOfParallelism, legalMoves.Count), Iterations);
+        var childResults = new ChildResult[legalMoves.Count];
+        int baseIterations = Iterations / legalMoves.Count;
+        int remainder = Iterations % legalMoves.Count;
 
-        // 最も訪問回数が多い子を選択する（勝率ではなく訪問数が選択基準として安定）
-        MctsNode? bestChild = null;
-        int bestVisits = -1;
-
-        for (int i = 0; i < root.Children.Count; i++)
-        {
-            MctsNode child = root.Children[i];
-            if (child.Visits > bestVisits)
+        Parallel.For(
+            0,
+            legalMoves.Count,
+            new ParallelOptions { MaxDegreeOfParallelism = workerCount },
+            moveIndex =>
             {
-                bestVisits = child.Visits;
-                bestChild = child;
+                Move move = legalMoves[moveIndex];
+                int localIterations = baseIterations + (moveIndex < remainder ? 1 : 0);
+
+                if (localIterations == 0)
+                {
+                    childResults[moveIndex] = new ChildResult(move, 0, 0);
+                    return;
+                }
+
+                Board childBoard = board.Clone();
+                childBoard.TryApplyMove(move);
+
+                var childRoot = new MctsNode(childBoard, parentMove: move, parent: null);
+                RunIterations(childRoot, localIterations, rootPlayer);
+
+                childResults[moveIndex] = new ChildResult(move, childRoot.Visits, childRoot.Wins);
+            });
+
+        stopwatch.Stop();
+        return BuildDecision(childResults, legalMoves, stopwatch.Elapsed.TotalMilliseconds, parallelMode: true);
+    }
+
+    /// <summary>
+    /// Executes full MCTS iterations from a root node.
+    /// </summary>
+    private void RunIterations(MctsNode root, int iterations, Disc rootPlayer)
+    {
+        for (int i = 0; i < iterations; i++)
+        {
+            MctsNode selected = Select(root);
+            MctsNode expanded = Expand(selected);
+            double result = Simulate(expanded, rootPlayer);
+            Backpropagate(expanded, result);
+        }
+    }
+
+    /// <summary>
+    /// Builds the final decision from sequential children results.
+    /// </summary>
+    private AIDecision BuildDecision(List<MctsNode> children, IReadOnlyList<Move> legalMoves, double elapsedMilliseconds, bool parallelMode)
+    {
+        if (children.Count == 0)
+        {
+            return new AIDecision(legalMoves[0], "Fallback to first legal move.");
+        }
+
+        MctsNode bestChild = children[0];
+        for (int i = 1; i < children.Count; i++)
+        {
+            if (children[i].Visits > bestChild.Visits)
+            {
+                bestChild = children[i];
             }
         }
 
-        if (bestChild?.ParentMove is null)
+        if (bestChild.ParentMove is null)
         {
             return new AIDecision(legalMoves[0], "Fallback to first legal move.");
         }
 
         double winRate = bestChild.Visits > 0 ? bestChild.Wins / bestChild.Visits : 0.0;
-        string thought = $"Iterations={Iterations}, BestVisits={bestVisits}, WinRate={winRate:P1}, Selected={ToCoordinate(bestChild.ParentMove.Value)}, Time={stopwatch.Elapsed.TotalMilliseconds:F1}ms";
+        string thought = $"Iterations={Iterations}, Mode={(parallelMode ? "ParallelRoot" : "SingleTree")}, Parallelism={MaxDegreeOfParallelism}, BestVisits={bestChild.Visits}, WinRate={winRate:P1}, Selected={ToCoordinate(bestChild.ParentMove.Value)}, Time={elapsedMilliseconds:F1}ms";
         return new AIDecision(bestChild.ParentMove.Value, thought);
+    }
+
+    /// <summary>
+    /// Builds the final decision from root-parallel aggregated results.
+    /// </summary>
+    private AIDecision BuildDecision(ChildResult[] results, IReadOnlyList<Move> legalMoves, double elapsedMilliseconds, bool parallelMode)
+    {
+        if (results.Length == 0)
+        {
+            return new AIDecision(legalMoves[0], "Fallback to first legal move.");
+        }
+
+        ChildResult best = results[0];
+        double bestWinRate = best.Visits > 0 ? best.Wins / best.Visits : 0.0;
+
+        for (int i = 1; i < results.Length; i++)
+        {
+            ChildResult candidate = results[i];
+            double candidateWinRate = candidate.Visits > 0 ? candidate.Wins / candidate.Visits : 0.0;
+
+            if (candidateWinRate > bestWinRate)
+            {
+                best = candidate;
+                bestWinRate = candidateWinRate;
+                continue;
+            }
+
+            if (candidateWinRate == bestWinRate)
+            {
+                if (candidate.Wins > best.Wins)
+                {
+                    best = candidate;
+                    bestWinRate = candidateWinRate;
+                    continue;
+                }
+
+                if (candidate.Wins == best.Wins && candidate.Visits > best.Visits)
+                {
+                    best = candidate;
+                    bestWinRate = candidateWinRate;
+                }
+            }
+        }
+
+        string thought = $"Iterations={Iterations}, Mode={(parallelMode ? "ParallelRoot" : "SingleTree")}, Parallelism={MaxDegreeOfParallelism}, BestVisits={best.Visits}, WinRate={bestWinRate:P1}, Selected={ToCoordinate(best.Move)}, Time={elapsedMilliseconds:F1}ms";
+        return new AIDecision(best.Move, thought);
     }
 
     /// <summary>
@@ -151,7 +248,7 @@ public sealed class MctsAI : IOthelloAI
         }
 
         // パス局面（合法手なし・終局でない）はパス後の盤面を1つの子として展開する
-        if (node.UntriedMoves.Count == 0 && node.IsPassNode)
+        if (node.UntriedCount == 0 && node.IsPassNode)
         {
             if (node.Children.Count == 0)
             {
@@ -165,8 +262,7 @@ public sealed class MctsAI : IOthelloAI
             return node.Children[0];
         }
 
-        Move nextMove = node.UntriedMoves[^1];
-        node.UntriedMoves.RemoveAt(node.UntriedMoves.Count - 1);
+        Move nextMove = node.PopUntriedMove();
 
         Board childBoard = node.Board.Clone();
         childBoard.TryApplyMove(nextMove);
@@ -184,17 +280,20 @@ public sealed class MctsAI : IOthelloAI
     {
         Board simulation = node.Board.Clone();
 
+        // stackalloc: 64 = 8x8 、全マス分の容量で十分
+        Span<Move> moveBuffer = stackalloc Move[64];
+
         while (!simulation.IsGameOver())
         {
-            IReadOnlyList<Move> moves = simulation.GetLegalMoves();
-            if (moves.Count == 0)
+            int moveCount = simulation.EnumerateLegalMoves(moveBuffer);
+            if (moveCount == 0)
             {
                 simulation.TryPass();
                 continue;
             }
 
-            int index = _random.Next(moves.Count);
-            simulation.TryApplyMove(moves[index]);
+            int index = Random.Shared.Next(moveCount);
+            simulation.TryApplyMove(moveBuffer[index]);
         }
 
         int rootDiscs = simulation.CountDiscs(rootPlayer);
@@ -253,14 +352,16 @@ public sealed class MctsAI : IOthelloAI
         return $"{file}{rank}";
     }
 
+    private readonly record struct ChildResult(Move Move, int Visits, double Wins);
+
     /// <summary>
     /// Represents a single node in the MCTS tree.
     /// </summary>
     private sealed class MctsNode
     {
-        /// <summary>
-        /// Initializes a new MCTS node.
-        /// </summary>
+        private int _untriedCount;
+        private Move[] _untriedMoves;
+
         public MctsNode(Board board, Move? parentMove, MctsNode? parent)
         {
             Board = board;
@@ -268,34 +369,34 @@ public sealed class MctsAI : IOthelloAI
             Parent = parent;
             Children = new List<MctsNode>();
 
-            IReadOnlyList<Move> legalMoves = board.GetLegalMoves();
+            Span<Move> buffer = stackalloc Move[64];
+            int count = board.EnumerateLegalMoves(buffer);
+
             IsTerminal = board.IsGameOver();
-            IsPassNode = !IsTerminal && legalMoves.Count == 0;
-            UntriedMoves = new List<Move>(legalMoves);
+            IsPassNode = !IsTerminal && count == 0;
+
+            _untriedMoves = count > 0 ? buffer[..count].ToArray() : [];
+            _untriedCount = _untriedMoves.Length;
         }
 
         public Board Board { get; }
-
-        /// <summary>Gets the move that led to this node from the parent.</summary>
         public Move? ParentMove { get; }
-
         public MctsNode? Parent { get; }
-
         public List<MctsNode> Children { get; }
-
-        /// <summary>Gets remaining unexpanded moves.</summary>
-        public List<Move> UntriedMoves { get; }
-
         public int Visits { get; set; }
-
         public double Wins { get; set; }
-
         public bool IsTerminal { get; }
-
-        /// <summary>Gets whether this node represents a pass-only state (no legal moves, not game over).</summary>
         public bool IsPassNode { get; }
 
-        /// <summary>Gets whether all legal moves have been expanded into children.</summary>
-        public bool IsFullyExpanded => UntriedMoves.Count == 0 && !IsPassNode;
+        /// <summary>Gets remaining unexpanded moves.</summary>
+        public int UntriedCount => _untriedCount;
+
+        public Move PopUntriedMove()
+        {
+            Move move = _untriedMoves[--_untriedCount];
+            return move;
+        }
+
+        public bool IsFullyExpanded => _untriedCount == 0 && !IsPassNode;
     }
 }

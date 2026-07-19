@@ -39,7 +39,9 @@ The project uses C#/.NET 10 for the game engine and Python for machine learning.
 src
 ├ Othello.Core
 ├ Othello.AI
+├ Othello.Python
 └ Othello.Console
+
 
 tests
 └ Othello.Tests
