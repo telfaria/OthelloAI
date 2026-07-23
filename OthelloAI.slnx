@@ -5,6 +5,7 @@
     <File Path="CodingRules.md" />
     <File Path="Decisions.md" />
     <File Path="GameRules.md" />
+    <File Path="README.md" />
     <File Path="Roadmap.md" />
   </Folder>
   <Folder Name="/Solution Items/">
