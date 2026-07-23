@@ -1,0 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cu132
+torch>=2.3.0
+onnx>=1.16.0
+torchvision

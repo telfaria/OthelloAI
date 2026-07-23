@@ -12,6 +12,7 @@
     <OutputPath>.</OutputPath>
     <Name>Othello.Python</Name>
     <RootNamespace>Othello.Python</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -26,6 +27,13 @@
     <Compile Include="kifu_recorder.py" />
     <Compile Include="kifu_store.py" />
     <Compile Include="Othello.Python.py" />
+    <Compile Include="train_policy_value_onnx.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="requirements-cpu.txt" />
+    <Content Include="requirements-cuda.txt" />
+    <Content Include="requirements.txt" />
+    <Content Include="run_train_venv.bat" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

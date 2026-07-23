@@ -12,8 +12,8 @@ internal static class Program
         int gameCount = ResolveGameCount(args);
         bool showThinking = ResolveThinkingVisibility(args);
 
-        Func<IOthelloAI> blackAIFactory = static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
-        Func<IOthelloAI> whiteAIFactory = static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
+        Func<IOthelloAI> blackAIFactory = ResolveAIFactory(args, "black");
+        Func<IOthelloAI> whiteAIFactory = ResolveAIFactory(args, "white");
 
         IOthelloAI blackAIInfo = blackAIFactory();
         IOthelloAI whiteAIInfo = whiteAIFactory();
@@ -110,6 +110,65 @@ internal static class Program
         }
 
         return input.Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Func<IOthelloAI> ResolveAIFactory(string[] args, string side)
+    {
+        string optionName = $"--{side}-ai";
+        string? aiName = TryGetOptionValue(args, optionName);
+
+        if (string.IsNullOrWhiteSpace(aiName))
+        {
+            // 既定は現行挙動を維持
+            return static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
+        }
+
+        switch (aiName.Trim().ToLowerInvariant())
+        {
+            case "random":
+                return static () => new RandomAI();
+            case "greedy":
+                return static () => new GreedyAI();
+            case "minimax":
+                return static () => new MinimaxAI(4);
+            case "alphabeta":
+                return static () => new AlphaBetaAI(6);
+            case "mcts":
+                return static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
+            case "neural":
+            case "neuralonnx":
+            {
+                string? modelPath = TryGetOptionValue(args, "--onnx-model");
+                if (string.IsNullOrWhiteSpace(modelPath))
+                {
+                    throw new ArgumentException("NeuralOnnxAI を使う場合は --onnx-model=<path> を指定してください。");
+                }
+
+                return () => new NeuralOnnxAI(modelPath);
+            }
+            default:
+                throw new ArgumentException($"Unsupported AI for {optionName}: {aiName}");
+        }
+    }
+
+    private static string? TryGetOptionValue(string[] args, string optionName)
+    {
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i].Trim();
+
+            if (arg.StartsWith(optionName + "=", StringComparison.OrdinalIgnoreCase))
+            {
+                return arg[(optionName.Length + 1)..];
+            }
+
+            if (string.Equals(arg, optionName, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private static void PrintSummary(SelfPlaySimulationSummary summary, IOthelloAI blackAI, IOthelloAI whiteAI, int gameCount)
