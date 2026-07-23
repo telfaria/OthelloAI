@@ -120,7 +120,7 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(aiName))
         {
             // 既定は現行挙動を維持
-            return static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
+            return static () => new MctsAI(iterations: 3000, maxDegreeOfParallelism: 30, explorationConstant: 1.616D);
         }
 
         switch (aiName.Trim().ToLowerInvariant())
@@ -134,7 +134,7 @@ internal static class Program
             case "alphabeta":
                 return static () => new AlphaBetaAI(6);
             case "mcts":
-                return static () => new MctsAI(3000, maxDegreeOfParallelism: 30);
+                return static () => new MctsAI(iterations: 3000, maxDegreeOfParallelism: 30, explorationConstant: 1.414D);
             case "neural":
             case "neuralonnx":
             {
@@ -196,8 +196,14 @@ internal static class Program
         global::System.Console.WriteLine($"Average Passes/Game: {avgPasses:F2}");
         global::System.Console.WriteLine($"Average Final Margin: {avgMargin:F2}");
         global::System.Console.WriteLine($"Max Final Margin: {summary.MaxMargin}");
-        global::System.Console.WriteLine($"Elapsed: {summary.Elapsed.TotalSeconds:F2}s");
+        global::System.Console.WriteLine($"Elapsed: {FormatElapsed(summary.Elapsed)} ({summary.Elapsed.TotalSeconds:F2}s)");
         global::System.Console.WriteLine($"Throughput: {gamesPerSecond:F2} games/s");
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        int totalHours = (int)elapsed.TotalHours;
+        return $"{totalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
     }
 
     private static void RenderBoard(Board board)
