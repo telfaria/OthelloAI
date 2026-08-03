@@ -23,7 +23,7 @@ set "ARGS=%*"
 
 if "%~1"=="" (
   echo [INFO] no arguments detected. use default options.
-  "%VENV_PYTHON%" "%SCRIPT_DIR%train_policy_value_onnx.py" --kifu "%DEFAULT_KIFU_DIR%" --onnx "%DEFAULT_ONNX%" --epochs 16 --batch-size 256 --device %DEVICE%
+  "%VENV_PYTHON%" "%SCRIPT_DIR%train_policy_value_onnx.py" --kifu "%DEFAULT_KIFU_DIR%" --onnx "%DEFAULT_ONNX%" --epochs 32 --batch-size 256 --device %DEVICE%
   exit /b %errorlevel%
 )
 
