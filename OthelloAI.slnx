@@ -4,14 +4,13 @@
     <File Path="Architecture.md" />
     <File Path="CodingRules.md" />
     <File Path="Decisions.md" />
+    <File Path="docs/WinUI設計書.md" />
     <File Path="GameRules.md" />
     <File Path="README.md" />
     <File Path="Roadmap.md" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
-  </Folder>
-  <Folder Name="/ソリューション頁E��/">
     <File Path="AGENTS.md" />
   </Folder>
   <Project Path="Othello.AI/Othello.AI.csproj" />
@@ -20,5 +19,7 @@
   <Project Path="Othello.Python/Othello.Python.pyproj" Type="888888a0-9f3d-457c-b088-3a5042f75d52" Id="41436e86-3e11-45be-bdc4-ff9c14b392fd">
     <Build Project="false" />
   </Project>
-  <Project Path="Othello.Tests/Othello.Tests.csproj" />`r`n  <Project Path="Othello.WinUI/Othello.WinUI.csproj" />`r`n</Solution>
+  <Project Path="Othello.Tests/Othello.Tests.csproj" />
+  <Project Path="Othello.WinUI/Othello.WinUI.csproj" />
+</Solution>
 

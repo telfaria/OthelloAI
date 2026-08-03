@@ -4,20 +4,210 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:viewModel="using:Othello.WinUI.ViewModel"
-    mc:Ignorable="d"
-    Title="{Binding WindowTitle}">
-    <Grid Padding="24">
-        <StackPanel Spacing="12">
-            <TextBlock
-                Style="{ThemeResource TitleTextBlockStyle}"
-                Text="{Binding WindowTitle}" />
-            <TextBlock
-                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                Text="{Binding PlatformDescription}" />
-            <TextBlock
-                Style="{ThemeResource BodyTextBlockStyle}"
-                Text="{Binding StatusMessage}" />
-        </StackPanel>
+    xmlns:controls="using:Othello.WinUI.Controls"
+    mc:Ignorable="d">
+    <Grid Padding="16" ColumnSpacing="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border
+            Grid.Column="0"
+            Padding="16"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            CornerRadius="8">
+            <StackPanel Spacing="12">
+                <TextBlock
+                    Style="{ThemeResource TitleTextBlockStyle}"
+                    Text="Navigation" />
+                <ListView ItemsSource="{Binding NavigationItems}" SelectionMode="None" />
+            </StackPanel>
+        </Border>
+
+        <Border
+            Grid.Column="1"
+            Padding="20"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="16">
+                    <TextBlock
+                        Style="{ThemeResource TitleTextBlockStyle}"
+                        Text="Dashboard" />
+
+                    <TextBlock
+                        Style="{ThemeResource BodyTextBlockStyle}"
+                        Text="{Binding PlatformDescription}" />
+
+                    <Grid RowSpacing="12" ColumnSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="現在の状態" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding CurrentStatus}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="SelfPlay実行状態" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding SelfPlayStatus}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="総ゲーム数" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding TotalGames}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="現在のゲーム数" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding CurrentGame}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="2"
+                            Grid.Column="0"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="CPU使用率(ダミー)" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding CpuUsage}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="GPU使用率(ダミー)" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding GpuUsage}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="3"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Padding="12"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock Text="経過時間" />
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding ElapsedTime}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border
+                        Padding="12"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        CornerRadius="6">
+                        <StackPanel Spacing="10">
+                            <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Board Viewer" />
+                            <controls:BoardViewerControl ViewModel="{Binding BoardViewer}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="12"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        CornerRadius="6">
+                        <StackPanel Spacing="10">
+                            <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Replay Viewer" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox
+                                    Width="420"
+                                    PlaceholderText="JSONLファイルまたはディレクトリを指定"
+                                    Text="{Binding ReplayViewer.JsonlPath, Mode=TwoWay}" />
+                                <Button
+                                    Content="JSONL読込"
+                                    Command="{Binding ReplayViewer.LoadJsonlCommand}" />
+                            </StackPanel>
+
+                            <TextBlock
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{Binding ReplayViewer.PlaybackStatus}" />
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="3*" />
+                                </Grid.ColumnDefinitions>
+
+                                <ListView
+                                    Grid.Column="0"
+                                    Height="220"
+                                    ItemsSource="{Binding ReplayViewer.Games}"
+                                    SelectedItem="{Binding ReplayViewer.SelectedGame, Mode=TwoWay}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+
+                                <StackPanel
+                                    Grid.Column="1"
+                                    Spacing="8">
+                                    <TextBlock Text="棋譜操作" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Content="再生" Command="{Binding ReplayViewer.PlayCommand}" />
+                                        <Button Content="一時停止" Command="{Binding ReplayViewer.PauseCommand}" />
+                                        <Button Content="次の手" Command="{Binding ReplayViewer.NextMoveCommand}" />
+                                        <Button Content="前の手" Command="{Binding ReplayViewer.PreviousMoveCommand}" />
+                                        <Button Content="最初へ" Command="{Binding ReplayViewer.FirstMoveCommand}" />
+                                        <Button Content="最後へ" Command="{Binding ReplayViewer.LastMoveCommand}" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                        Text="{Binding ReplayViewer.CurrentMoveLabel}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
     </Grid>
 </Window>

@@ -1,0 +1,68 @@
+<UserControl
+    x:Class="Othello.WinUI.Controls.BoardViewerControl"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Othello.WinUI.Models"
+    mc:Ignorable="d">
+    <Grid DataContext="{Binding ViewModel, ElementName=Root}" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="現在手番:" />
+                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding CurrentTurn}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="黒石:" />
+                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding BlackDiscCount}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="白石:" />
+                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{Binding WhiteDiscCount}" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border
+            Grid.Row="1"
+            Padding="8"
+            Background="DarkGreen"
+            CornerRadius="6">
+            <ItemsControl ItemsSource="{Binding Cells}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid MaximumRowsOrColumns="8" Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:BoardCellDisplayModel">
+                        <Border
+                            Width="44"
+                            Height="44"
+                            Margin="1"
+                            Background="#0A000000"
+                            BorderBrush="#55000000"
+                            BorderThickness="1">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="22"
+                                Text="{Binding DiscSymbol}" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <TextBlock
+            Grid.Row="2"
+            Style="{ThemeResource CaptionTextBlockStyle}"
+            Text="合法手表示は無効化されています。" />
+    </Grid>
+</UserControl>

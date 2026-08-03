@@ -11,9 +11,16 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// <see cref="MainWindow"/> クラスの新しいインスタンスを初期化します。
     /// </summary>
-    public MainWindow()
+    /// <param name="viewModel">画面表示データを提供する ViewModel です。</param>
+    public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel();
+
+        if (Content is FrameworkElement root)
+        {
+            root.DataContext = viewModel;
+        }
+
+        Title = viewModel.WindowTitle;
     }
 }
